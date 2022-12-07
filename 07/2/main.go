@@ -15,29 +15,10 @@ type File struct {
 type Dir struct {
 	Name    string
 	Path    string
+	Parent  *Dir
 	Files   []*File
 	SubDirs []*Dir
 	Size    int
-}
-
-func (d *Dir) GetAllSubDirs() []*Dir {
-	subDirs := []*Dir{}
-	subDirs = append(subDirs, d.SubDirs...)
-	for _, subDir := range d.SubDirs {
-		subDirs = append(subDirs, subDir.GetAllSubDirs()...)
-	}
-	return subDirs
-}
-
-func (d *Dir) TotalSize() int {
-	size := d.Size
-
-	subDirs := d.GetAllSubDirs()
-	for _, subDir := range subDirs {
-		size += subDir.Size
-	}
-
-	return size
 }
 
 func pathString(path []*Dir) string {
@@ -73,7 +54,7 @@ func main() {
 						dirs[currentPath] = make(map[string]*Dir)
 					}
 					if _, ok := dirs[currentPath][dirName]; !ok {
-						dirs[currentPath][dirName] = &Dir{Name: dirName}
+						dirs[currentPath][dirName] = &Dir{Name: dirName, Parent: currentDir}
 					}
 					currentDir = dirs[currentPath][dirName]
 					path = append(path, currentDir)
@@ -88,11 +69,12 @@ func main() {
 				dirs[currentPath] = make(map[string]*Dir)
 			}
 			if _, ok := dirs[currentPath][dirName]; !ok {
-				dirs[currentPath][dirName] = &Dir{Name: dirName}
+				dirs[currentPath][dirName] = &Dir{Name: dirName, Parent: currentDir}
 			}
 			currentDir.SubDirs = append(currentDir.SubDirs, dirs[currentPath][dirName])
 			continue
 		}
+
 		// file
 		fileDetails := strings.Split(line, " ")
 		fileSize, err := strconv.ParseInt(fileDetails[0], 10, 64)
@@ -103,15 +85,22 @@ func main() {
 		file := &File{Name: fileName, Size: int(fileSize)}
 		currentDir.Files = append(currentDir.Files, file)
 		currentDir.Size += int(fileSize)
+		parent := currentDir.Parent
+		for parent != nil {
+			parent.Size += int(fileSize)
+			parent = parent.Parent
+		}
 	}
 
-	targetSize := 30000000
-	currentSize := dirs["root/"]["/"].TotalSize()
+	targetSpace := 30000000
+	totalSize := 70000000
+	targetSize := totalSize - targetSpace
+	currentSize := dirs["root/"]["/"].Size
 	fmt.Println("current size:", currentSize)
 
 	for pathName, path := range dirs {
 		for _, dir := range path {
-			fmt.Println(pathName, dir.Name, dir.TotalSize())
+			fmt.Println(pathName, dir.Name, dir.Size)
 		}
 	}
 
@@ -120,7 +109,7 @@ func main() {
 	// find smallest dir to delete to get under target size
 	for _, path := range dirs {
 		for _, dir := range path {
-			dirSize := dir.TotalSize()
+			dirSize := dir.Size
 			if currentSize-dirSize <= targetSize {
 				if dirToDelete == nil || dirSize < dirToDeleteSize {
 					dirToDelete = dir
